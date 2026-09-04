@@ -1,0 +1,11 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  esbuild: false
+  node-llama-cpp: true
+  tree-sitter: true
+  tree-sitter-c: true
+  tree-sitter-cpp: true
+  tree-sitter-javascript: true
+  tree-sitter-typescript: true
