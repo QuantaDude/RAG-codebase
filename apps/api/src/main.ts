@@ -876,13 +876,13 @@ const parser = new Parser();
 parser.setLanguage(cpp);
 
 const buffer = Buffer.alloc(15655);
-const readBytes = await readFile("/home/abhirup/Projects/algo-visualizer/src/scene.cpp", buffer, buffer.length);
+const readBytes = await readFile("/home/abhirup/Projects/algo-visualizer/src/utils.cpp", buffer, buffer.length);
 
 console.log(readBytes);
 // console.log(buffer.toString());
 
 const tree = parser.parse(buffer.toString());
-console.log(tree.rootNode?.child(10)?.type, tree.rootNode?.child(10).text);
+console.log(tree.rootNode?.child(2)?.type, tree.rootNode?.child(2)?.grammarType, tree.rootNode?.child(2)?.fields);
 // console.log(tree.rootNode?.type, tree.rootNode.text);
 
 async function readFile(filepath: string, buffer: Buffer, bufSize: number): Promise<number> {

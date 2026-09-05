@@ -1,5 +1,7 @@
 import { drizzle, NodePgDatabase } from "drizzle-orm/node-postgres";
-import 'dotenv/config';
+import ParseDotEnv from "../utils";
+
+Object.assign(process.env, ParseDotEnv());
 
 function initDB(): NodePgDatabase {
   const db = drizzle({
