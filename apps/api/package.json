@@ -4,14 +4,21 @@
   "description": "",
   "main": "main.ts",
   "scripts": {
-    "setup:db": "tsx scripts/create-db.ts",
+    "dev:setup:db" : "BUILD=dev tsx scripts/create-db.ts",
+    "dev:db:generate" : "BUILD=dev drizzle-kit generate",
+    "dev:db:migrate" : "BUILD=dev drizzle-kit migrate",
+    "dev:db:push": "BUILD=dev drizzle-kit push",
+    "dev:db:seed" : "BUILD=dev tsx ./src/db/seed.ts",
+    "dev": "BUILD=dev tsx watch src/main.ts",
+
+    "setup:db": "BUILD=release tsx scripts/create-db.ts",
     "setup:models": "tsx scripts/fetch-models.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "dev": "tsx watch src/main.ts",
-    "build": "tsc",
-    "start": "node dist/main.js",
+    
+    "build": "BUILD=release tsc",
+    "start": "BUILD=release node dist/main.js",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],

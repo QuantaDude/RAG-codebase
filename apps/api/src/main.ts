@@ -9,6 +9,11 @@ import { integer, varchar } from "drizzle-orm/pg-core/columns";
 import { fileURLToPath } from "url";
 import path from "path";
 import { getLlama, LlamaChatSession } from "node-llama-cpp";
+import ParseDotEnv from "./utils";
+
+Object.assign(process.env, await ParseDotEnv());
+
+const db = initDB();
 
 type CodeItem = {
    id: number;

@@ -1,9 +1,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import ParseDotEnv from "../src/utils";
 
 const execFileAsync = promisify(execFile);
+Object.assign(process.env, await ParseDotEnv());
 
-const database = "rag_app";
+const database: string = process.env.DB_NAME!;
 
 async function main() {
   try {

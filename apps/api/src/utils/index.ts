@@ -18,7 +18,8 @@ export default async function ParseDotEnv(): Promise<Record<string, string | num
 
   const keyRegExp = new RegExp('^[a-zA-Z_]+[a-zA-Z0-9_]*$');
   const env: Record<string, string | number | boolean | undefined> = {};
-  const file = await open('./.env');
+  const file = process.env.BUILD == "release" ? await open('./.env') : await open('./.env.development');
+  console.log(process.env.BUILD);
   try {
     const buffer = Buffer.alloc(256);
 
