@@ -1,7 +1,8 @@
-import { bigint, integer, jsonb, pgEnum, text, uuid, vector } from "drizzle-orm/pg-core/columns";
+import { bigint, integer, jsonb, pgEnum, serial, text, uuid, vector } from "drizzle-orm/pg-core/columns";
 import { pgTable } from "drizzle-orm/pg-core/table";
 import { users } from "./users";
 import { index } from "drizzle-orm/pg-core/indexes";
+import { InferInsertModel, InferSelectModel } from "drizzle-orm";
 
 export const codebaseTypeEnum = pgEnum("codebase_type", ["zip", "git"]);
 export const chunkTypeEnum = pgEnum("chunk_type",
@@ -31,8 +32,8 @@ export type Parameter = {
 };
 
 export const codebase = pgTable('codebases', {
-  id: uuid('id').primaryKey(),
-  authorId: integer('author_id').notNull().references(() => users.id, {
+  id: uuid('id').defaultRandom().primaryKey(),
+  authorId: serial('author_id').notNull().references(() => users.id, {
     onDelete: 'cascade',
     onUpdate: 'no action'
   }),
@@ -44,7 +45,7 @@ export const codebase = pgTable('codebases', {
 
 
 export const chunk = pgTable('chunks', {
-  id: uuid().primaryKey(),
+  id: uuid().defaultRandom().primaryKey(),
   codebaseId: uuid('codebase_id').references(() => codebase.id, {
     onDelete: 'cascade',
     onUpdate: 'no action'
@@ -67,3 +68,11 @@ export const chunk = pgTable('chunks', {
   })
 
 );
+
+type CodebaseInsert = typeof codebase.$inferInsert;
+type CodebaseSelect = typeof codebase.$inferSelect;
+type ChunkInsert = typeof chunk.$inferInsert;
+type ChunkSelect = typeof chunk.$inferSelect;
+
+// type ChunkInsert = InferInsertModel<typeof chunk>;
+export type { CodebaseInsert, CodebaseSelect, ChunkInsert, ChunkSelect };

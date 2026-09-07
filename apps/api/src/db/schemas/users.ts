@@ -19,3 +19,9 @@ export const users = pgTable('users', {
     sql`${table.type} != 'user' OR ${table.email} IS NOT NULL`,
   )
 ]);
+
+
+type UserSelect = typeof users.$inferSelect;
+type UserInsert = typeof users.$inferInsert;
+
+export type { UserSelect, UserInsert };

@@ -10,26 +10,13 @@ import { fileURLToPath } from "url";
 import path from "path";
 import { getLlama, LlamaChatSession } from "node-llama-cpp";
 import ParseDotEnv from "./utils";
+import { CodeItem, IndexedCodeItem } from "./types";
 
 Object.assign(process.env, await ParseDotEnv());
 
 const db = initDB();
 
-type CodeItem = {
-   id: number;
-   name: string;
-   kind: "function";
-   parameters: {
-      name: string;
-      type: string;
-   }[];
-   returnType: string;
-   code: string;
-};
 
-type IndexedCodeItem = CodeItem & {
-   embedding: number[];
-};
 
 const llama = await getLlama();
 
