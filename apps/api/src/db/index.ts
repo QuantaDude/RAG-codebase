@@ -1,6 +1,5 @@
-import { drizzle, NodePgDatabase } from "drizzle-orm/node-postgres";
-
-function initDB(): NodePgDatabase {
+import { drizzle } from "drizzle-orm/node-postgres";
+function initDB() {
   const db = drizzle({
     connection: {
       host: process.env.DB_HOST!,

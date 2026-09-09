@@ -9,6 +9,7 @@ export type UserController = {
 export function createUserController() {
 
   async function register(req: Request, res: Response) {
+    res.json({ user: 'me' });
 
   }
 

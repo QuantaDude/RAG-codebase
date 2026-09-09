@@ -2,7 +2,7 @@ import { ChatHistoryItem, Llama, LlamaChatSession, LlamaContext, LlamaContextSeq
 import fs from "node:fs/promises";
 
 export type DecoderService = {
-  createChatContext: (id?: string) => Promise<LlamaContext>;
+  createChatContext: (id?: string) => Promise<{ context: LlamaContext, session: LlamaChatSession }>;
   saveChatHistory: (id: string, session: LlamaChatSession) => Promise<void>;
   saveChatContext: (id: string, sequence: LlamaContextSequence) => Promise<number>;
 };
@@ -27,7 +27,7 @@ async function createDecoderService(llamaInstance: Llama) {
 
   }
 
-  async function createChatContext(id?: string): Promise<LlamaContext> {
+  async function createChatContext(id?: string): Promise<{ context: LlamaContext, session: LlamaChatSession }> {
 
     const context = await model.createContext();
     const sequence = context.getSequence();
@@ -41,7 +41,7 @@ async function createDecoderService(llamaInstance: Llama) {
 
     session.setChatHistory(history ?? []);
 
-    return context;
+    return { context, session };
   }
 
 

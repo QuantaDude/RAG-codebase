@@ -1,4 +1,5 @@
 import { LlamaModel } from "node-llama-cpp";
+import { DecoderService } from "./llm-decoder-gen.service";
 
 
 const filterPrompt = `
@@ -474,11 +475,22 @@ Output:
 
 Now parse this user query:
 
-${query}
 `;
-export default function createQueryService(qwenInstance: LlamaModel, sbertInstance: LlamaModel) {
+export type QueryService = {
 
+   getFilter: (query: string) => Promise<string>;
+};
+export default function createQueryService(qwenInstance: DecoderService, sbertInstance: any) {
 
+   async function getFilter(query: string) {
+      const { context, session } = await qwenInstance.createChatContext();
 
+      const result = await session.prompt(filterPrompt + query);
+      return result;
+   }
+
+   return {
+      getFilter
+   } satisfies QueryService;
 
 }
