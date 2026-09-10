@@ -9,7 +9,9 @@ export type DecoderService = {
 
 async function createDecoderService(llamaInstance: Llama) {
 
-  //need LRU cache map and timeout to remove the least recently used
+  //need LRU cache map and timeout to remove the least recently used sessions and contexts
+  //
+  //
   const model = await llamaInstance.loadModel({
     modelPath: './models/Qwen3-4B-Instruct-2507-Q5_K_M.gguf',
     gpuLayers: 16

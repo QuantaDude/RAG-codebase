@@ -1,5 +1,9 @@
 import { LlamaModel } from "node-llama-cpp";
 import { DecoderService } from "./llm-decoder-gen.service";
+import { EncoderService } from "./sbert-encoder.service";
+import { NodePgClient, NodePgDatabase } from "drizzle-orm/node-postgres";
+import { chunk, dataTypes, Parameter } from "../db/schemas/codebase";
+import { and, eq, or, sql, cosineDistance } from "drizzle-orm";
 
 
 const filterPrompt = `
@@ -17,10 +21,31 @@ The JSON object may contain these fields:
 {
   "kind": "function" | "class" | "method",
   "parameterCount": number,
-  "parameterNames": string[],
-  "parameterTypes": string[],
+  "parameters": Parameter[],
   "returnType": string
 }
+
+Where:
+
+Parameter = {
+  "name": string,
+  "type": DataType,
+  "optional"?: boolean
+}
+
+DataType =
+  "number" | "string" | "boolean" | "object" | "array" | "function" | "unknown"
+
+Each entry in "parameters" describes ONE parameter, in positional order
+(the first entry is the first parameter, the second entry is the second
+parameter, etc).
+
+- "name" is the parameter's identifier. Use "" when the name is not
+  explicitly known.
+- "type" is the parameter's normalized type. Use "unknown" when the type
+  is not explicitly known.
+- "optional" is true ONLY when the user explicitly says that parameter
+  is optional. Omit it entirely otherwise (never set it to false).
 
 Rules:
 
@@ -39,12 +64,18 @@ Rules:
    "takes no arguments" -> 0
    "doesn't take any parameters" -> 0
 
-3. "parameterNames"
+3. "parameters"
+
+Each parameter is represented as an object with "name", "type", and
+optionally "optional". Only include a parameter entry, or fill in a
+field on one, when the user explicitly provides that information.
+
+3a. "name"
 
 A parameter name is the LITERAL identifier used in source code.
 
-Extract a parameter name ONLY when the user explicitly provides
-the literal identifier.
+Set "name" ONLY when the user explicitly provides the literal
+identifier. Otherwise use "".
 
 A natural-language description of a parameter is NOT a parameter name.
 
@@ -58,37 +89,37 @@ Examples of parameter DESCRIPTIONS:
 - file path
 - authentication token
 
-These descriptions MUST NOT be converted into parameter names.
+These descriptions MUST NOT be converted into names.
 
 For example:
 
 "accepts a user ID"
 ->
-parameterNames: []
+parameters: []
 
 "accepts a configuration object"
 ->
-parameterNames: []
+parameters: []
 
 "accepts a user ID and a configuration object"
 ->
-parameterNames: []
+parameters: []
 
 "accepts a parameter named userId"
 ->
-parameterNames: ["userId"]
+parameters: [{ "name": "userId", "type": "unknown" }]
 
 "accepts an argument called userId"
 ->
-parameterNames: ["userId"]
+parameters: [{ "name": "userId", "type": "unknown" }]
 
 "the first parameter is userId"
 ->
-parameterNames: ["userId"]
+parameters: [{ "name": "userId", "type": "unknown" }]
 
 "the second parameter is named config"
 ->
-parameterNames: ["", "config"]
+parameters: [{ "name": "", "type": "unknown" }, { "name": "config", "type": "unknown" }]
 
 A valid parameter name MUST be a single source-code identifier.
 
@@ -124,24 +155,24 @@ For example:
 
 "takes a user ID"
 MUST produce:
-[]
+parameters: []
 
 It MUST NOT produce:
-["userId"]
+parameters: [{ "name": "userId", "type": "unknown" }]
 
 "takes a configuration object"
 MUST produce:
-[]
+parameters: []
 
 It MUST NOT produce:
-["config"]
+parameters: [{ "name": "config", "type": "unknown" }]
 
 "takes a username"
 MUST produce:
-[]
+parameters: []
 
 It MUST NOT produce:
-["username"]
+parameters: [{ "name": "username", "type": "unknown" }]
 
 Even if a description happens to look like a common variable name,
 it is still a description unless the user explicitly identifies it
@@ -151,16 +182,16 @@ For example:
 
 "takes a username and password"
 ->
-[]
+parameters: []
 
 NOT:
-["username", "password"]
+parameters: [{ "name": "username", "type": "unknown" }, { "name": "password", "type": "unknown" }]
 
 However:
 
 "takes parameters named username and password"
 ->
-["username", "password"]
+parameters: [{ "name": "username", "type": "unknown" }, { "name": "password", "type": "unknown" }]
 
 Parameter names are positional.
 
@@ -171,20 +202,20 @@ Example:
 
 "first parameter is named userId"
 ->
-["userId"]
+parameters: [{ "name": "userId", "type": "unknown" }]
 
 Example:
 
 "second parameter is named config"
 ->
-["", "config"]
+parameters: [{ "name": "", "type": "unknown" }, { "name": "config", "type": "unknown" }]
 
 If the user explicitly provides multiple parameter names and their
 order is clear:
 
 "parameters named userId and config, in that order"
 ->
-["userId", "config"]
+parameters: [{ "name": "userId", "type": "unknown" }, { "name": "config", "type": "unknown" }]
 
 If the order cannot be determined, do NOT guess.
 
@@ -192,65 +223,88 @@ Example:
 
 "parameters named userId and config"
 ->
-[]
+parameters: []
 
 If only some parameter names are explicitly known and their
-positions are known, preserve the positions and use an empty string
-for unknown positions.
+positions are known, preserve the positions and use "" for unknown
+positions.
 
 NEVER invent a missing parameter name.
 NEVER infer a parameter name from its meaning.
 NEVER infer a parameter name from its type.
 NEVER infer a parameter name from common programming conventions.
 
-4. "parameterTypes"
-   Extract parameter types ONLY when the user explicitly specifies them.
+3b. "type"
 
-   The ordering matters.
+Extract "type" ONLY when the user explicitly specifies it. Otherwise
+use "unknown".
 
-   The first element describes the first parameter.
-   The second element describes the second parameter.
-   The third element describes the third parameter, etc.
+The ordering matters.
 
-   Examples:
+The first entry describes the first parameter.
+The second entry describes the second parameter.
+The third entry describes the third parameter, etc.
 
-   "takes two numbers"
-   ->
-   ["number", "number"]
+Examples:
 
-   "accepts a string and a number"
-   ->
-   ["string", "number"]
+"takes two numbers"
+->
+parameters: [{ "name": "", "type": "number" }, { "name": "", "type": "number" }]
 
-   "takes a boolean"
-   ->
-   ["boolean"]
+"accepts a string and a number"
+->
+parameters: [{ "name": "", "type": "string" }, { "name": "", "type": "number" }]
 
-   "takes a string followed by a number"
-   ->
-   ["string", "number"]
+"takes a boolean"
+->
+parameters: [{ "name": "", "type": "boolean" }]
 
-   Use these normalized type names when applicable:
-   - number
-   - string
-   - boolean
-   - object
-   - array
-   - function
-   - unknown
+"takes a string followed by a number"
+->
+parameters: [{ "name": "", "type": "string" }, { "name": "", "type": "number" }]
 
-   Do NOT infer a type from the parameter's name.
+Use these normalized type names when applicable:
+- number
+- string
+- boolean
+- object
+- array
+- function
+- unknown
 
-   Example:
+Do NOT infer a type from the parameter's name.
 
-   "takes a parameter named 'age'"
-   ->
-   parameterTypes should be []
+Example:
 
-   Do NOT assume:
-   ["number"]
+"takes a parameter named 'age'"
+->
+parameters: [{ "name": "age", "type": "unknown" }]
 
-5. "returnType"
+Do NOT assume:
+parameters: [{ "name": "age", "type": "number" }]
+
+3c. "optional"
+
+Set "optional": true on a parameter entry ONLY when the user
+explicitly states that specific parameter is optional. Omit the
+field entirely otherwise — never set it to false.
+
+Example:
+
+"takes an optional parameter named config"
+->
+parameters: [{ "name": "config", "type": "unknown", "optional": true }]
+
+Example:
+
+"takes a number and an optional boolean"
+->
+parameters: [{ "name": "", "type": "number" }, { "name": "", "type": "boolean", "optional": true }]
+
+NEVER infer "optional" from a parameter's name, type, or position.
+NEVER infer it just because a parameter is mentioned after others.
+
+4. "returnType"
    Extract the return type when explicitly stated.
 
    Examples:
@@ -275,7 +329,7 @@ NEVER infer a parameter name from common programming conventions.
    ->
    "boolean"
 
-6. Relationship between parameterNames, parameterTypes and parameterCount
+5. Relationship between parameters and parameterCount
 
    These fields are independent.
 
@@ -291,8 +345,10 @@ NEVER infer a parameter name from common programming conventions.
    {
      "kind": "function",
      "parameterCount": 2,
-     "parameterNames": [],
-     "parameterTypes": ["number", "number"]
+     "parameters": [
+       { "name": "", "type": "number" },
+       { "name": "", "type": "number" }
+     ]
    }
 
    Example:
@@ -303,7 +359,10 @@ NEVER infer a parameter name from common programming conventions.
    {
      "kind": "function",
      "parameterCount": 2,
-     "parameterNames": ["a", "b"]
+     "parameters": [
+       { "name": "a", "type": "unknown" },
+       { "name": "b", "type": "unknown" }
+     ]
    }
 
    Example:
@@ -316,11 +375,10 @@ NEVER infer a parameter name from common programming conventions.
    ->
    {
      "kind": "function",
-     "parameterNames": [],
-     "parameterTypes": []
+     "parameters": []
    }
 
-7. Do NOT infer structural information from semantic descriptions.
+6. Do NOT infer structural information from semantic descriptions.
 
    Example:
 
@@ -330,7 +388,7 @@ NEVER infer a parameter name from common programming conventions.
 
    Do NOT assume it takes numbers.
 
-8. Keep semantic information OUT of the JSON.
+7. Keep semantic information OUT of the JSON.
 
    Example:
 
@@ -340,23 +398,28 @@ NEVER infer a parameter name from common programming conventions.
    {
      "kind": "function",
      "parameterCount": 2,
-     "parameterTypes": ["number", "number"]
+     "parameters": [
+       { "name": "", "type": "number" },
+       { "name": "", "type": "number" }
+     ]
    }
 
    The phrase "calculates their sum" is semantic information.
    It must NOT appear in the JSON.
 
-9. If the query contains no structural constraints, return:
+8. If the query contains no structural constraints, return:
 
    {}
 
-10. Never add fields that aren't explicitly supported by the schema.
+9. Never add fields that aren't explicitly supported by the schema.
 
-11. Never use null.
+10. Never use null.
 
-12. Never invent parameter names.
+11. Never invent parameter names.
 
-13. Never invent parameter types.
+12. Never invent parameter types.
+
+13. Never invent an "optional" flag.
 
 14. Never infer missing positional information.
 
@@ -373,8 +436,10 @@ Output:
 {
   "kind": "function",
   "parameterCount": 2,
-  "parameterNames": [],
-  "parameterTypes": ["number", "number"],
+  "parameters": [
+    { "name": "", "type": "number" },
+    { "name": "", "type": "number" }
+  ],
   "returnType": "void"
 }
 
@@ -385,7 +450,7 @@ Output:
 {
   "kind": "function",
   "parameterCount": 0,
-  "parameterNames": []
+  "parameters": []
 }
 
 User query:
@@ -404,8 +469,10 @@ Output:
 {
   "kind": "method",
   "parameterCount": 2,
-  "parameterNames": [],
-  "parameterTypes": ["string", "boolean"]
+  "parameters": [
+    { "name": "", "type": "string" },
+    { "name": "", "type": "boolean" }
+  ]
 }
 
 User query:
@@ -414,7 +481,9 @@ User query:
 Output:
 {
   "kind": "function",
-  "parameterNames": ["userId"]
+  "parameters": [
+    { "name": "userId", "type": "unknown" }
+  ]
 }
 
 User query:
@@ -424,7 +493,10 @@ Output:
 {
   "kind": "function",
   "parameterCount": 2,
-  "parameterNames": ["userId", "includeDeleted"]
+  "parameters": [
+    { "name": "userId", "type": "unknown" },
+    { "name": "includeDeleted", "type": "unknown" }
+  ]
 }
 
 User query:
@@ -433,8 +505,7 @@ User query:
 Output:
 {
   "kind": "function",
-  "parameterNames": [],
-  "parameterTypes": []
+  "parameters": []
 }
 
 User query:
@@ -444,8 +515,21 @@ Output:
 {
   "kind": "function",
   "parameterCount": 2,
-  "parameterNames": ["userId"],
-  "parameterTypes": ["unknown", "boolean"]
+  "parameters": [
+    { "name": "userId", "type": "unknown" },
+    { "name": "", "type": "boolean" }
+  ]
+}
+
+User query:
+"find functions that take an optional parameter named 'limit'"
+
+Output:
+{
+  "kind": "function",
+  "parameters": [
+    { "name": "limit", "type": "unknown", "optional": true }
+  ]
 }
 
 User query:
@@ -469,28 +553,67 @@ Output:
 {
   "kind": "function",
   "parameterCount": 2,
-  "parameterNames": [],
-  "parameterTypes": ["number", "number"]
+  "parameters": [
+    { "name": "", "type": "number" },
+    { "name": "", "type": "number" }
+  ]
 }
 
 Now parse this user query:
 
 `;
+
 export type QueryService = {
 
-   getFilter: (query: string) => Promise<string>;
+   // getFilter: (query: string) => Promise<string>;
+   search: (query: string) => Promise<string>;
 };
-export default function createQueryService(qwenInstance: DecoderService, sbertInstance: any) {
+export default function createQueryService(qwenInstance: DecoderService, sbertInstance: EncoderService,
+   database: NodePgDatabase & { $client: NodePgClient }) {
 
-   async function getFilter(query: string) {
+   async function getFilter(query: string): Promise<Object> {
       const { context, session } = await qwenInstance.createChatContext();
 
       const result = await session.prompt(filterPrompt + query);
-      return result;
+      //validate first
+      //
+      context.dispose();
+      return JSON.parse(result);
    }
 
+   async function search(query: string): Promise<string> {
+
+      const filters = await getFilter(query);
+      console.log(filters);
+      const queryVector = (await sbertInstance.encodeQuery(query)).vector;
+      const vectors = `[${queryVector.join(",")}]`;
+
+
+      // const result = await database.select().from(chunk).where(or(eq(chunk.kind, kind), eq(chunk.returnType, returnType ?? dataTypes)));
+      const results = await database
+         .select({
+            id: chunk.id,
+            content: chunk.code,
+
+            similarity: sql<number>`
+      1 - (${chunk.embedding} <=> ${vectors}::vector)
+    `.as("similarity"),
+         })
+         .from(chunk)
+         .where(and(eq(chunk.kind, filters['kind']),
+            sql`jsonb_array_length(${chunk.parameters}) = ${filters["parameterCount"]}`,
+            filters["returnType"] && filters["returnType"] != "" ? eq(chunk.returnType, filters["returnType"]) : undefined
+         )
+         )
+         .orderBy(
+            sql`${chunk.embedding} <=> ${vectors}::vector`
+         )
+         .limit(10);
+
+      return results[0].content;
+   }
    return {
-      getFilter
+      search
    } satisfies QueryService;
 
 }

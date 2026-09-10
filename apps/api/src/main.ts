@@ -16,6 +16,7 @@ import { users } from "./db/schemas/users.ts";
 import { createQueryRoutes, createUserRoutes } from "./routes";
 import { CodeItem, IndexedCodeItem } from "./types";
 import { createDecoderService } from "./services/llm-decoder-gen.service.ts";
+import createEncoderService from "./services/sbert-encoder.service.ts";
 
 Object.assign(process.env, await ParseDotEnv());
 
@@ -35,13 +36,13 @@ async function main() {
    }
 
    const decoderSerivce = await createDecoderService(llama);
-
+   const encoderService = await createEncoderService(llama);
    const app = Express();
    app.use(cors(corsOptions));
    app.use(Express.json());
 
    app.use("/api", createUserRoutes());
-   app.use('/api', createQueryRoutes(db, decoderSerivce));
+   app.use('/api', createQueryRoutes(db, decoderSerivce, encoderService));
 
 
    app.listen(3000, () => console.log("listenting on port 3000"));

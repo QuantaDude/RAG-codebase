@@ -12,7 +12,7 @@ export function createQueryController(queryService: QueryService) {
     console.log(req.body);
     if (req.params["id"] == "1") {
       res.status(201).json(
-        await queryService.getFilter(req.body["query"]),
+        await queryService.search(req.body["query"]),
       );
     } else {
 

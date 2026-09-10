@@ -1,14 +1,15 @@
-import { Llama } from "node-llama-cpp";
+import { Llama, LlamaEmbedding, LlamaModel } from "node-llama-cpp";
 import { CodeItem } from "../types";
 import { ChunkInsert } from "../db/schemas/codebase";
 
 export type EncoderService = {
   indexFile: (code: CodeItem[], codebaseId: string) => Promise<ChunkInsert[]>;
+  encodeQuery: (query: string, filters?: any) => Promise<LlamaEmbedding>;
 }
 
 export default async function createEncoderService(llama: Llama) {
 
-  const model = await llama.loadModel({
+  const model: LlamaModel = await llama.loadModel({
     modelPath: "./models/jina-code-embeddings-0.5b-BF16.gguf",
     gpuLayers: 0,
   });
@@ -53,5 +54,13 @@ export default async function createEncoderService(llama: Llama) {
     return index;
   }
 
-  return { indexFile } satisfies EncoderService;
+  async function encodeQuery(query: string, filters?: any): Promise<LlamaEmbedding> {
+
+    const context = await model.createEmbeddingContext();
+
+    //later I might add filters to the query string like I do in toEmbeddingDocument function, or I might just remove them.
+    return await context.getEmbeddingFor(query);
+  }
+
+  return { indexFile, encodeQuery } satisfies EncoderService;
 }
