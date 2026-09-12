@@ -64,11 +64,53 @@ Rules:
    "takes no arguments" -> 0
    "doesn't take any parameters" -> 0
 
+   Do NOT derive this number by counting how many "parameters" entries
+   you ended up with, by counting pronouns that refer back to an
+   already-introduced parameter, or by counting the actions/verbs the
+   query describes. If no count is explicitly stated, omit
+   "parameterCount" entirely — even when exactly one parameter's name
+   or type was extracted.
+
 3. "parameters"
 
 Each parameter is represented as an object with "name", "type", and
 optionally "optional". Only include a parameter entry, or fill in a
 field on one, when the user explicitly provides that information.
+
+A parameter entry is added to the array ONLY when the query
+introduces that parameter — by giving it a name, a type, an explicit
+position, or as part of an explicit list/count of parameters. Do NOT
+add an entry for a pronoun that refers back to an already-introduced
+parameter (e.g. "it", "that value", "the same one"), and do NOT add
+one for a phrase describing what the function DOES with a parameter
+(e.g. "prints it", "logs it", "returns it", "sends it to the
+server"). Those describe behavior, not a new parameter.
+
+Example:
+
+"takes a string named message and then prints it to the console"
+->
+{
+  "kind": "function",
+  "parameters": [
+    { "name": "message", "type": "string" }
+  ]
+}
+
+It MUST NOT produce:
+{
+  "kind": "function",
+  "parameterCount": 2,
+  "parameters": [
+    { "name": "message", "type": "string" },
+    { "name": "", "type": "unknown" }
+  ]
+}
+
+"prints it to the console" describes what the function does with
+"message" — "it" refers back to "message", not to a new, second
+parameter, so no second entry is added and "parameterCount" is
+omitted (it was never explicitly stated).
 
 3a. "name"
 
@@ -174,6 +216,25 @@ parameters: []
 It MUST NOT produce:
 parameters: [{ "name": "username", "type": "unknown" }]
 
+This still applies when the query ALSO states the parameter's type.
+Extracting a type never licenses extracting a name from the same
+description — the two are independent, and a description stays a
+description no matter what is said about its type.
+
+"takes a numeric user id"
+MUST produce:
+parameters: [{ "name": "", "type": "number" }]
+
+It MUST NOT produce:
+parameters: [{ "name": "userId", "type": "number" }]
+
+"takes a string username"
+MUST produce:
+parameters: [{ "name": "", "type": "string" }]
+
+It MUST NOT produce:
+parameters: [{ "name": "username", "type": "string" }]
+
 Even if a description happens to look like a common variable name,
 it is still a description unless the user explicitly identifies it
 as a source-code parameter name.
@@ -233,6 +294,10 @@ NEVER invent a missing parameter name.
 NEVER infer a parameter name from its meaning.
 NEVER infer a parameter name from its type.
 NEVER infer a parameter name from common programming conventions.
+NEVER promote a description into a name just because a type was
+also extracted for that same parameter.
+NEVER add a parameter entry for a pronoun or restated reference to
+an already-introduced parameter.
 
 3b. "type"
 
@@ -407,6 +472,22 @@ NEVER infer it just because a parameter is mentioned after others.
    The phrase "calculates their sum" is semantic information.
    It must NOT appear in the JSON.
 
+   Example:
+
+   "function that takes a string named message and logs it to the console"
+
+   ->
+   {
+     "kind": "function",
+     "parameters": [
+       { "name": "message", "type": "string" }
+     ]
+   }
+
+   "logs it to the console" describes behavior. It must NOT be
+   treated as a second parameter, must NOT affect "parameterCount",
+   and must NOT appear in the JSON.
+
 8. If the query contains no structural constraints, return:
 
    {}
@@ -533,6 +614,39 @@ Output:
 }
 
 User query:
+"can you find the function which retrieves the username? the function takes in a numeric user id."
+
+Output:
+{
+  "kind": "function",
+  "parameterCount": 1,
+  "parameters": [
+    { "name": "", "type": "number" }
+  ]
+}
+
+"user id" is a description, not a literal identifier, so "name" stays
+"". Extracting "type": "number" from "numeric" does NOT justify also
+writing "name": "userId" — that would be an invented identifier.
+
+User query:
+"I want the function which takes in a string named message and then the function prints it to the console. it logs it."
+
+Output:
+{
+  "kind": "function",
+  "parameters": [
+    { "name": "message", "type": "string" }
+  ]
+}
+
+Only one parameter was introduced: a string named "message". "prints
+it to the console" and "it logs it" describe what the function does
+with "message" — "it" refers back to "message" both times, not to a
+second parameter. No second entry is added, and "parameterCount" is
+omitted since no count was ever explicitly stated.
+
+User query:
 "find code that parses JSON"
 
 Output:
@@ -565,55 +679,52 @@ Now parse this user query:
 
 export type QueryService = {
 
-   // getFilter: (query: string) => Promise<string>;
-   search: (query: string) => Promise<string>;
+  // getFilter: (query: string) => Promise<string>;
+  search: (query: string) => Promise<string>;
 };
 export default function createQueryService(qwenInstance: DecoderService, sbertInstance: EncoderService,
-   database: NodePgDatabase & { $client: NodePgClient }) {
+  database: NodePgDatabase & { $client: NodePgClient }) {
 
-   async function getFilter(query: string): Promise<Object> {
-      const { context, session } = await qwenInstance.createChatContext();
+  async function getFilter(query: string): Promise<Object> {
+    const { context, session } = await qwenInstance.createChatContext();
 
-      const result = await session.prompt(filterPrompt + query);
-      //validate first
-      //
-      context.dispose();
-      return JSON.parse(result);
-   }
+    const result = await session.prompt(filterPrompt + query);
+    //validate first
+    //
+    context.dispose();
+    return JSON.parse(result);
+  }
 
-   async function search(query: string): Promise<string> {
+  async function search(query: string): Promise<string> {
 
-      const filters = await getFilter(query);
-      console.log(filters);
-      const queryVector = (await sbertInstance.encodeQuery(query)).vector;
-      const vectors = `[${queryVector.join(",")}]`;
+    const filters = await getFilter(query);
+    console.log(filters);
+    const queryVector = (await sbertInstance.encodeQuery(query)).vector;
+    const vectors = `[${queryVector.join(",")}]`;
+    const similarity = sql<number>`1 - (${cosineDistance(chunk.embedding, vectors)})`.as("similarity");
 
+    // const result = await database.select().from(chunk).where(or(eq(chunk.kind, kind), eq(chunk.returnType, returnType ?? dataTypes)));
+    const results = await database
+      .select({
+        id: chunk.id,
+        content: chunk.code,
 
-      // const result = await database.select().from(chunk).where(or(eq(chunk.kind, kind), eq(chunk.returnType, returnType ?? dataTypes)));
-      const results = await database
-         .select({
-            id: chunk.id,
-            content: chunk.code,
+        similarity: similarity
+      })
+      .from(chunk)
+      .where(and(eq(chunk.kind, filters['kind']),
+        filters["parameterCount"] ? sql`jsonb_array_length(${chunk.parameters}) = ${filters["parameterCount"]}` : undefined,
+        filters["returnType"] && filters["returnType"] != "" ? eq(chunk.returnType, filters["returnType"]) : undefined
+      )
+      )
+      .orderBy(cosineDistance(chunk.embedding, vectors))
+      .limit(10);
 
-            similarity: sql<number>`
-      1 - (${chunk.embedding} <=> ${vectors}::vector)
-    `.as("similarity"),
-         })
-         .from(chunk)
-         .where(and(eq(chunk.kind, filters['kind']),
-            sql`jsonb_array_length(${chunk.parameters}) = ${filters["parameterCount"]}`,
-            filters["returnType"] && filters["returnType"] != "" ? eq(chunk.returnType, filters["returnType"]) : undefined
-         )
-         )
-         .orderBy(
-            sql`${chunk.embedding} <=> ${vectors}::vector`
-         )
-         .limit(10);
-
-      return results[0].content;
-   }
-   return {
-      search
-   } satisfies QueryService;
+    console.log(results[0].content);
+    return results[0].content;
+  }
+  return {
+    search
+  } satisfies QueryService;
 
 }

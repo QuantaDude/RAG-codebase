@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
-
+export type Message = {
+}
 export default function Chat() {
+  const [chats, SetChatMessages] = useState<{ id: string, sender: "user" | "server", message: string, sent: boolean }[]>([]);
+
   const [query, setQueryString] = useState("");
   const sendQueryRequest = useRef<boolean>(false);
   async function sendQuery(text: string) {
@@ -30,41 +33,72 @@ export default function Chat() {
     }
 
     try {
+      sendQueryRequest.current = true;
+
+      SetChatMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: crypto.randomUUID(),
+          sender: "user",
+          message: text,
+          sent: false,
+        },
+      ]);
+
       const result = await sendQuery(text);
+
       console.log(result);
 
+      SetChatMessages((currentMessages) => [
+        ...currentMessages,
+        {
+          id: crypto.randomUUID(),
+          sender: "server",
+          message: result,
+          sent: true,
+        },
+      ]);
+
       setQueryString("");
+      sendQueryRequest.current = false;
+
     } catch (error) {
+      sendQueryRequest.current = false;
+
+      SetChatMessages((currentMessages) =>
+        currentMessages.filter((val) => val.sent)
+      );
+
       console.error("Failed to send query:", error);
     }
   }
-
   return (
     <>
       <main id="chat">
         <div id="messages">
-          <div className='message-bubble '>
-            <p>Another message...</p>
-          </div>
-          <div className="message-bubble user">
-            <p>This is a very long text to check how the sentence wraps around the bubble.</p>
-          </div>
-
-
-          <div className='message-bubble loading'>
-            <div id="load">
-              <div>T</div>
-              <div>h</div>
-              <div>i</div>
-              <div>n</div>
-              <div>k</div>
-              <div>i</div>
-              <div>n</div>
-              <div>g</div>
+          {chats.map((val, idx) => (
+            <div key={idx} className={`message-bubble ${val.sender === "user" ? "user" : ""}`}>
+              <p>{val.message}</p>
             </div>
-          </div>
+          ))}
+
+
+          {sendQueryRequest.current &&
+            <div className='message-bubble loading'>
+              <div id="load">
+                <div>T</div>
+                <div>h</div>
+                <div>i</div>
+                <div>n</div>
+                <div>k</div>
+                <div>i</div>
+                <div>n</div>
+                <div>g</div>
+              </div>
+            </div>
+          }
         </div>
-      </main>
+      </main >
 
       <div id="chat-box-container">
         <div id="chat-box">

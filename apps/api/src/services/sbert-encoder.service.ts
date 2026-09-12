@@ -59,7 +59,10 @@ export default async function createEncoderService(llama: Llama) {
     const context = await model.createEmbeddingContext();
 
     //later I might add filters to the query string like I do in toEmbeddingDocument function, or I might just remove them.
-    return await context.getEmbeddingFor(query);
+    const vectors: LlamaEmbedding = await context.getEmbeddingFor(query);
+
+    await context.dispose();
+    return vectors;
   }
 
   return { indexFile, encodeQuery } satisfies EncoderService;
