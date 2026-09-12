@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-
+import type { QueryResponse } from "@RAG-codebase/types";
 export type Message = {
 }
 export default function Chat() {
@@ -7,7 +7,7 @@ export default function Chat() {
 
   const [query, setQueryString] = useState("");
   const sendQueryRequest = useRef<boolean>(false);
-  async function sendQuery(text: string) {
+  async function sendQuery(text: string): Promise<QueryResponse> {
 
     const response = await fetch("http://localhost:3000/api/chat/1", {
       method: 'POST',
@@ -54,7 +54,7 @@ export default function Chat() {
         {
           id: crypto.randomUUID(),
           sender: "server",
-          message: result,
+          message: result.message,
           sent: true,
         },
       ]);

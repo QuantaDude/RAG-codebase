@@ -1,6 +1,6 @@
 packages:
   - "apps/*"
-  - "packages/*"
+  - "shared/*"
 allowBuilds:
   esbuild: false
   node-llama-cpp: true

@@ -4,6 +4,7 @@ import { EncoderService } from "./sbert-encoder.service";
 import { NodePgClient, NodePgDatabase } from "drizzle-orm/node-postgres";
 import { chunk, dataTypes, Parameter } from "../db/schemas/codebase";
 import { and, eq, or, sql, cosineDistance } from "drizzle-orm";
+import { QueryResponse } from "@RAG-codebase/types";
 
 
 const filterPrompt = `
@@ -695,7 +696,7 @@ export default function createQueryService(qwenInstance: DecoderService, sbertIn
     return JSON.parse(result);
   }
 
-  async function search(query: string): Promise<string> {
+  async function search(query: string): Promise<QueryResponse> {
 
     const filters = await getFilter(query);
     console.log(filters);
@@ -721,7 +722,9 @@ export default function createQueryService(qwenInstance: DecoderService, sbertIn
       .limit(10);
 
     console.log(results[0].content);
-    return results[0].content;
+    return {
+      message: results[0].content
+    };
   }
   return {
     search

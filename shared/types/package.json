@@ -1,0 +1,9 @@
+{
+  "name": "@RAG-codebase/types",
+  "private": true,
+  "version": "0.0.0",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
