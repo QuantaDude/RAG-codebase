@@ -2,7 +2,7 @@ import { LlamaModel } from "node-llama-cpp";
 import { DecoderService } from "./llm-decoder-gen.service";
 import { EncoderService } from "./sbert-encoder.service";
 import { NodePgClient, NodePgDatabase } from "drizzle-orm/node-postgres";
-import { chunk, dataTypes, Parameter } from "../db/schemas/codebase";
+import { chunk, ChunkInsert, chunkTypeEnum, DataType, dataTypes, Parameter } from "../db/schemas/codebase";
 import { and, eq, or, sql, cosineDistance } from "drizzle-orm";
 import { QueryResponse } from "@RAG-codebase/types";
 
@@ -680,54 +680,167 @@ Now parse this user query:
 
 export type QueryService = {
 
-  // getFilter: (query: string) => Promise<string>;
-  search: (query: string) => Promise<string>;
+   // getFilter: (query: string) => Promise<string>;
+   search: (query: string) => Promise<QueryResponse>;
 };
 export default function createQueryService(qwenInstance: DecoderService, sbertInstance: EncoderService,
-  database: NodePgDatabase & { $client: NodePgClient }) {
+   database: NodePgDatabase & { $client: NodePgClient }) {
 
-  async function getFilter(query: string): Promise<Object> {
-    const { context, session } = await qwenInstance.createChatContext();
+   async function getFilter(query: string): Promise<Object> {
+      const { context, session } = await qwenInstance.createChatContext();
 
-    const result = await session.prompt(filterPrompt + query);
-    //validate first
-    //
-    context.dispose();
-    return JSON.parse(result);
-  }
+      const result = await session.prompt(filterPrompt + query);
+      //validate first
+      //
+      context.dispose();
+      return JSON.parse(result);
+   }
 
-  async function search(query: string): Promise<QueryResponse> {
+   function normalizedFilter(obj: any): Omit<ChunkInsert, 'id' | 'name' | 'code' | 'embedding'> & { parameterCount: number } {
 
-    const filters = await getFilter(query);
-    console.log(filters);
-    const queryVector = (await sbertInstance.encodeQuery(query)).vector;
-    const vectors = `[${queryVector.join(",")}]`;
-    const similarity = sql<number>`1 - (${cosineDistance(chunk.embedding, vectors)})`.as("similarity");
+      const parameterCount = obj['parameterCount'] ?? Number.MAX_SAFE_INTEGER;
 
-    // const result = await database.select().from(chunk).where(or(eq(chunk.kind, kind), eq(chunk.returnType, returnType ?? dataTypes)));
-    const results = await database
-      .select({
-        id: chunk.id,
-        content: chunk.code,
+      const kind = chunkTypeEnum.enumValues.includes(obj['kind'] ?? '') ? obj['kind'] : "any";
 
-        similarity: similarity
-      })
-      .from(chunk)
-      .where(and(eq(chunk.kind, filters['kind']),
-        filters["parameterCount"] ? sql`jsonb_array_length(${chunk.parameters}) = ${filters["parameterCount"]}` : undefined,
-        filters["returnType"] && filters["returnType"] != "" ? eq(chunk.returnType, filters["returnType"]) : undefined
-      )
-      )
-      .orderBy(cosineDistance(chunk.embedding, vectors))
-      .limit(10);
+      const returnType: DataType = dataTypes.includes(obj['returnType'] ?? '') ? obj['returnType'] : '';
 
-    console.log(results[0].content);
-    return {
-      message: results[0].content
-    };
-  }
-  return {
-    search
-  } satisfies QueryService;
+      const parameters: Parameter[] = ((obj["parameters"] ?? []) as Parameter[]).filter((val) => {
+         const name = val.name ?? ''; val.name = name;
+         let type: any = val.type ?? '';
+         val.type = dataTypes.includes(type) ? type : 'unknown';
+         return name == '' && type == '' ? false : true;
+      });
+
+      return {
+         kind: kind,
+         parameterCount: parameterCount,
+         returnType: returnType,
+         parameters: parameters ?? []
+      }
+   }
+   async function search(query: string): Promise<QueryResponse> {
+
+      const filters = normalizedFilter(await getFilter(query));
+      console.log(filters);
+      const queryVector = (await sbertInstance.encodeQuery(query)).vector;
+      const vectors = `[${queryVector.join(",")}]`;
+      const similarity = sql<number>`1 - (${cosineDistance(chunk.embedding, vectors)})`.as("similarity");
+
+      // const parameterMatch = sql``
+      // const result = await database.select().from(chunk).where(or(eq(chunk.kind, kind), eq(chunk.returnType, returnType ?? dataTypes)));
+
+      const parameterMatch = sql`
+         EXISTS (
+            WITH RECURSIVE
+            filter_params AS (
+               SELECT *
+               FROM jsonb_array_elements(
+                  ${JSON.stringify(filters.parameters)}::jsonb
+               ) WITH ORDINALITY AS f(param, idx)
+            ),
+            db_params AS (
+               SELECT
+                  param,
+                  idx - 1 AS idx
+               FROM jsonb_array_elements(${chunk.parameters})
+               WITH ORDINALITY AS d(param, idx)
+            ),
+            matches AS (
+               SELECT
+                  0 AS db_idx,
+                  ARRAY(
+                     SELECT idx
+                     FROM filter_params
+                     ORDER BY idx
+                  ) AS remaining
+               
+               UNION ALL
+               
+               SELECT
+                  m.db_idx + 1,
+                  CASE
+                     WHEN candidate.idx IS NULL
+                        THEN m.remaining
+                     ELSE array_remove(m.remaining, candidate.idx)
+                  END
+               FROM matches m
+               JOIN db_params db
+                  ON db.idx = m.db_idx
+               LEFT JOIN LATERAL (
+                  SELECT f.idx
+                  FROM filter_params f
+                  WHERE f.idx = ANY(m.remaining)
+                  AND (
+                     f.param->>'type' = 'unknown'
+                     OR f.param->>'type' = ''
+                     OR f.param->>'type' = db.param->>'type'
+                  )
+                  AND (
+                     f.param->>'name' = ''
+                     OR f.param->>'name' = db.param->>'name'
+                  )
+                  ORDER BY
+                     CASE
+                        WHEN f.param->>'type' <> 'unknown'
+                        AND f.param->>'type' <> ''
+                        AND f.param->>'type' = db.param->>'type'
+                        THEN 0
+                        ELSE 1
+                     END,
+                     CASE
+                        WHEN f.param->>'name' <> ''
+                        AND f.param->>'name' = db.param->>'name'
+                        THEN 0
+                        ELSE 1
+                     END,
+                     f.idx
+                  LIMIT 1
+               ) candidate ON true
+            )
+            SELECT 1
+            FROM matches
+            WHERE cardinality(remaining) = 0
+         )
+      `;
+
+      const results = await database
+         .select({
+            id: chunk.id,
+            content: chunk.code,
+            similarity: similarity
+         })
+         .from(chunk)
+         .where(
+            //need to check for project id in the future
+            and(
+               chunkTypeEnum.enumValues.includes(filters.kind) ? eq(chunk.kind, filters.kind) : undefined,
+
+               filters.parameterCount !== Number.MAX_SAFE_INTEGER
+                  ? sql`
+                 jsonb_array_length(${chunk.parameters})
+                 = ${filters.parameterCount}
+              `
+                  : undefined,
+
+               filters.returnType !== ''
+                  ? eq(chunk.returnType, filters.returnType)
+                  : undefined,
+
+               parameterMatch
+            )
+         )
+         .orderBy(cosineDistance(chunk.embedding, vectors))
+         .limit(10);
+
+
+      return {
+         message: results[0].content
+      };
+   }
+
+
+   return {
+      search
+   } satisfies QueryService;
 
 }
