@@ -35,8 +35,8 @@
   --shadow: 0 4px 12px rgba(37, 42, 49, 0.12);
   --shadow-lg: 0 10px 30px rgba(37, 42, 49, 0.16);
   --shadow-xl: 0 20px 50px rgba(37, 42, 49, 0.20);
---heading: 'EB Garamond', Georgia, serif;
---serif: 'EB Garamond', Georgia, serif;
+  --heading: 'EB Garamond', Georgia, serif;
+  --serif: 'EB Garamond', Georgia, serif;
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
@@ -148,19 +148,4 @@ h2 {
 p {
   margin: 0;
   font-size: clamp(1.2rem, 0.5vw + 0.6rem, 2rem);
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--color-text);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--color-surface-elevated);
 }

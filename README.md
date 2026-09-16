@@ -9,19 +9,6 @@ The project is a pnpm monorepo:
 
 > Once the project is at an acceptable stage, the plan is to drop the Express dependency in favor of custom HTTP helpers.
 
-## Roadmap
-
-| Iteration | What it covers | Status |
-|---|---|---|
-| 1st | Search through existing embedded/indexed code via the UI: query → query endpoint → structural meaning via a decoder transformer + semantic meaning via a code-embedding model → narrow down chunks → pgvector cosine similarity search → return the code body with the highest similarity score. | In progress |
-| 2nd | Guest user + zip project upload, showing chunk-embedding progress to the user. | ⬜ Not started |
-| 3rd | User accounts. | ⬜ Not started — schema and route stubs exist, no working register/login logic yet |
-| 4th | Add the option to share a chat with guest viewers. | ⬜ Not started |
-| 5th | Git support, incremental embedding/indexing. | ⬜ Not started |
-| 6th | Infer if the query asked for an explaination, try to explain the piece of code using qwen. | ⬜ Not started |
-| 7th (maybe) | Change the monolithic pipeline to distributed queue workers — each worker does chunking + encoding, or querying. | ⬜ Not started |
-| 8th (optional) | Add the option to remove a GitHub repo's code from the database. | ⬜ Not started |
-
 ## Prerequisites
 
 - Node.js (LTS, 20+ recommended)
@@ -91,4 +78,18 @@ The project is a pnpm monorepo:
    Visit `http://localhost:5173` and query the seeded sample functions from the chat box.
 
 Once steps 2–6 have been done at least once, you can also run `pnpm dev` from the repo root to start both apps' dev servers in parallel.
+
+## Roadmap
+
+| Iteration | What it covers | Status |
+|---|---|---|
+| 1st | Search through existing embedded/indexed code via the UI: query → query endpoint → structural meaning via a decoder transformer + semantic meaning via a code-embedding model → narrow down chunks → pgvector cosine similarity search → return the code body with the highest similarity score. | Done |
+| 2nd | Guest user + zip project upload, showing chunk-embedding progress to the user. | In Progress |
+| 3rd | User accounts. | ⬜ Not started — schema and route stubs exist, no working register/login logic yet |
+| 4th | Add the option to share a chat with guest viewers. | ⬜ Not started |
+| 5th | Git support, incremental embedding/indexing. | ⬜ Not started |
+| 6th | Infer if the query asked for an explaination, try to explain the piece of code using qwen. | ⬜ Not started |
+| 7th (maybe) | Change the monolithic pipeline to distributed queue workers — each worker does chunking + encoding, or querying. | ⬜ Not started |
+| 8th (optional) | Add the option to remove a GitHub repo's code from the database. | ⬜ Not started |
+
 

@@ -1,12 +1,15 @@
 
 #spacer {
-  height: 88px;
+  height: min(1em, 10%);
   border-top: 1px solid var(--color-border);
-  @media (max-width: 1024px) {
-    height: 48px;
-  }
+  /* @media (max-width: 1024px) { */
+  /*   height: 48px; */
+  /* } */
 }
 
+#spacer p{
+  font-size: 1rem;
+}
 .title {
   flex: 0 0 auto;
 

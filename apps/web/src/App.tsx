@@ -14,19 +14,14 @@ function App() {
         {/* <CloseButton /> */}
       </section>
 
-      {/* <div className="ticks"></div> */}
-
-      {/* <section id="next-steps"> */}
-      {/**/}
-      {/* </section> */}
       {/* <PopupConfirmation message='Hello this is a sample text!' title='Confirm' onCancel={sub} onAccept={add} /> */}
 
 
       <Chat />
-      {/* <div className="ticks"></div> */}
-      {/* <section id="spacer"> */}
-      {/*   <p>test</p> */}
-      {/* </section> */}
+      <div className="ticks"></div>
+      <section id="spacer">
+        <p>developed with 💛 by a human.</p>
+      </section>
     </>
   )
 }
