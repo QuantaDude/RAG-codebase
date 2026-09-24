@@ -1,4 +1,5 @@
 import { Router } from "express";
+import express from "express";
 import { createUserController } from "../controllers/user.controller";
 
 
@@ -8,6 +9,6 @@ export default function createUserRoutes() {
 
   router.post("/register", controller.register);
   router.post("/login", controller.login);
-
+  router.post("/upload", express.raw({ type: 'application/octet-stream' }), controller.handleZipUpload);
   return router;
 }

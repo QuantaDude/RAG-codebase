@@ -127,6 +127,26 @@ export default function Chat() {
           </button>
 
         </div>
+        <div id="upload">
+          <button>
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 19V5M6.5 10.5L12 5L17.5 10.5"
+                stroke="var(--accent)"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+
+          </button>
+        </div>
       </div>
     </>
   );
