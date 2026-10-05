@@ -11,6 +11,7 @@ import cors from "cors";
 import { createQueryRoutes, createUserRoutes } from "./routes";
 import { createDecoderService } from "./services/llm-decoder-gen.service.ts";
 import createEncoderService from "./services/sbert-encoder.service.ts";
+import { CreateCodeIndexingService } from "./services/code-indexing.service.ts";
 
 Object.assign(process.env, await ParseDotEnv());
 
@@ -22,7 +23,7 @@ async function main(): Promise<void> {
    const llama = await getLlama();
    const decoderSerivce = await createDecoderService(llama);
    const encoderService = await createEncoderService(llama);
-
+  const indexingService = CreateCodeIndexingService();
    const app = Express();
 
    const whitelist = ['http://localhost:5173'];
@@ -39,7 +40,7 @@ async function main(): Promise<void> {
    app.use(cors(corsOptions));
    app.use(Express.json());
 
-   app.use("/api", createUserRoutes());
+   app.use("/api", createUserRoutes(indexingService));
    app.use('/api', createQueryRoutes(db, decoderSerivce, encoderService));
 
 

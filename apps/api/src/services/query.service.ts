@@ -751,7 +751,13 @@ export default function createQueryService(qwenInstance: DecoderService, sbertIn
                   ARRAY(
                      SELECT idx
                      FROM filter_params
-                     ORDER BY idx
+                     ORDER BY
+                        CASE
+                           WHEN param->> 'type' NOT IN ('', 'unknown') AND param->> 'name' NOT IN ('', ' ')
+                           THEN 0
+                        ELSE 1
+                        END,
+                        idx
                   ) AS remaining
                
                UNION ALL
@@ -760,7 +766,7 @@ export default function createQueryService(qwenInstance: DecoderService, sbertIn
                   m.db_idx + 1,
                   CASE
                      WHEN candidate.idx IS NULL
-                        THEN m.remaining
+                        THEN m.remaining             --f.idx
                      ELSE array_remove(m.remaining, candidate.idx)
                   END
                FROM matches m
@@ -802,35 +808,41 @@ export default function createQueryService(qwenInstance: DecoderService, sbertIn
             WHERE cardinality(remaining) = 0
          )
       `;
+      let results: any;
+      try {
+         results = await database
+            .select({
+               id: chunk.id,
+               content: chunk.code,
+               similarity: similarity
+            })
+            .from(chunk)
+            .where(
+               //need to check for project id in the future
+               and(
+                  chunkTypeEnum.enumValues.includes(filters.kind) ? eq(chunk.kind, filters.kind) : undefined,
 
-      const results = await database
-         .select({
-            id: chunk.id,
-            content: chunk.code,
-            similarity: similarity
-         })
-         .from(chunk)
-         .where(
-            //need to check for project id in the future
-            and(
-               chunkTypeEnum.enumValues.includes(filters.kind) ? eq(chunk.kind, filters.kind) : undefined,
-
-               filters.parameterCount !== Number.MAX_SAFE_INTEGER
-                  ? sql`
+                  filters.parameterCount !== Number.MAX_SAFE_INTEGER
+                     ? sql`
                  jsonb_array_length(${chunk.parameters})
                  = ${filters.parameterCount}
               `
-                  : undefined,
+                     : undefined,
 
-               filters.returnType !== ''
-                  ? eq(chunk.returnType, filters.returnType)
-                  : undefined,
+                  filters.returnType !== ''
+                     ? eq(chunk.returnType, filters.returnType)
+                     : undefined,
 
-               parameterMatch
+                  parameterMatch
+               )
             )
-         )
-         .orderBy(cosineDistance(chunk.embedding, vectors))
-         .limit(10);
+            .orderBy(cosineDistance(chunk.embedding, vectors))
+            .limit(10);
+
+      } catch (e: any) {
+         console.error(e.cause?.message, e.cause?.code, e.cause?.detail, e.cause?.position);
+         throw e
+      }
 
 
       return {

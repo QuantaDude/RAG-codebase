@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import type { QueryResponse } from "@RAG-codebase/types";
 export type Message = {
 }
 export default function Chat() {
   const [chats, SetChatMessages] = useState<{ id: string, sender: "user" | "server", message: string, sent: boolean }[]>([]);
 
+  const [zipFile, setZipFile] = useState<File | null>();
   const [query, setQueryString] = useState("");
   const sendQueryRequest = useRef<boolean>(false);
+
+  
+
   async function sendQuery(text: string): Promise<QueryResponse> {
 
     const response = await fetch("http://localhost:3000/api/chat/1", {
@@ -72,6 +76,30 @@ export default function Chat() {
       console.error("Failed to send query:", error);
     }
   }
+  function handleUpload (e:ChangeEvent<HTMLInputElement>) {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile)
+      return;
+
+    setZipFile(selectedFile); 
+  }
+
+  async function uploadFile () {
+    if (!zipFile)
+      return;
+
+
+    const response = await fetch("http://localhost:3000/api/upload", {
+      headers: {"Content-Type": "application/zip"},
+      method: "POST",
+      body: zipFile
+    });
+
+    if (!response.ok) {
+      throw new Error("upload failed");
+    }
+    console.log("uploaded");
+  }
   return (
     <>
       <main id="chat">
@@ -128,7 +156,8 @@ export default function Chat() {
 
         </div>
         <div id="upload">
-          <button>
+          <input type="file" accept="application/zip, application/x-zip-compressed" onChange={handleUpload}></input>
+         {zipFile && <button  onClick={uploadFile}>
             <svg
               width="24"
               height="24"
@@ -144,8 +173,8 @@ export default function Chat() {
                 strokeLinejoin="round"
               />
             </svg>
-
           </button>
+         }
         </div>
       </div>
     </>

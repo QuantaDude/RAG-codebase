@@ -22,7 +22,6 @@ export function createUserController(indexingService: IndexingService) {
 
   async function handleZipUpload(req: Request, res: Response) {
 
-    console.log(req.body);
     indexingService.readZipFile(req.body);
     res.status(201).send();
   }
@@ -32,5 +31,3 @@ export function createUserController(indexingService: IndexingService) {
     handleZipUpload
   } satisfies UserController;
 }
-
-
