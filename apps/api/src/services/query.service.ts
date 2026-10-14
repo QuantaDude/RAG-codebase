@@ -698,6 +698,7 @@ export default function createQueryService(qwenInstance: DecoderService, sbertIn
 
    function normalizedFilter(obj: any): Omit<ChunkInsert, 'id' | 'name' | 'code' | 'embedding'> & { parameterCount: number } {
 
+      console.log("unfiltered: ", obj);
       const parameterCount = obj['parameterCount'] ?? Number.MAX_SAFE_INTEGER;
 
       const kind = chunkTypeEnum.enumValues.includes(obj['kind'] ?? '') ? obj['kind'] : "any";

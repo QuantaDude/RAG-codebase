@@ -1,0 +1,1 @@
+ALTER TYPE "return_type" ADD VALUE 'object';

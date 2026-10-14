@@ -18,6 +18,7 @@ export const dataTypes = [
   "int",
   "float",
   "char",
+  "object"
 ] as const;
 
 export type DataType = (typeof dataTypes)[number];
