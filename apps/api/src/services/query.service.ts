@@ -2,7 +2,7 @@ import { LlamaModel } from "node-llama-cpp";
 import { DecoderService } from "./llm-decoder-gen.service";
 import { EncoderService } from "./sbert-encoder.service";
 import { NodePgClient, NodePgDatabase } from "drizzle-orm/node-postgres";
-import { chunk, ChunkInsert, chunkTypeEnum, DataType, dataTypes, Parameter } from "../db/schemas/codebase";
+import { chunk, ChunkInsert, CHUNK_TYPE_ENUM, DataType, DATA_TYPES, Parameter } from "../db/schemas/codebase";
 import { and, eq, or, sql, cosineDistance } from "drizzle-orm";
 import { QueryResponse } from "@RAG-codebase/types";
 
@@ -701,14 +701,14 @@ export default function createQueryService(qwenInstance: DecoderService, sbertIn
       console.log("unfiltered: ", obj);
       const parameterCount = obj['parameterCount'] ?? Number.MAX_SAFE_INTEGER;
 
-      const kind = chunkTypeEnum.enumValues.includes(obj['kind'] ?? '') ? obj['kind'] : "any";
+      const kind = CHUNK_TYPE_ENUM.enumValues.includes(obj['kind'] ?? '') ? obj['kind'] : "any";
 
-      const returnType: DataType = dataTypes.includes(obj['returnType'] ?? '') ? obj['returnType'] : '';
+      const returnType: DataType = DATA_TYPES.includes(obj['returnType'] ?? '') ? obj['returnType'] : '';
 
       const parameters: Parameter[] = ((obj["parameters"] ?? []) as Parameter[]).filter((val) => {
          const name = val.name ?? ''; val.name = name;
          let type: any = val.type ?? '';
-         val.type = dataTypes.includes(type) ? type : 'unknown';
+         val.type = DATA_TYPES.includes(type) ? type : 'unknown';
          return name == '' && type == '' ? false : true;
       });
 
@@ -821,7 +821,7 @@ export default function createQueryService(qwenInstance: DecoderService, sbertIn
             .where(
                //need to check for project id in the future
                and(
-                  chunkTypeEnum.enumValues.includes(filters.kind) ? eq(chunk.kind, filters.kind) : undefined,
+                  CHUNK_TYPE_ENUM.enumValues.includes(filters.kind) ? eq(chunk.kind, filters.kind) : undefined,
 
                   filters.parameterCount !== Number.MAX_SAFE_INTEGER
                      ? sql`

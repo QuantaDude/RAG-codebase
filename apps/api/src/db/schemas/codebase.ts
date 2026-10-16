@@ -4,13 +4,13 @@ import { users } from "./users";
 import { index } from "drizzle-orm/pg-core/indexes";
 import { InferInsertModel, InferSelectModel } from "drizzle-orm";
 
-export const codebaseTypeEnum = pgEnum("codebase_type", ["zip", "git"]);
-export const chunkTypeEnum = pgEnum("chunk_type",
+export const CODEBASE_TYPE_ENUM = pgEnum("codebase_type", ["zip", "git"]);
+export const CHUNK_TYPE_ENUM = pgEnum("chunk_type",
   //C++
   ["function", "function_definition", "function_declarator", "function_declaration",
     "class", "storage_class_specifier", "access_specifier", "method", "variable"]);
 
-export const dataTypes = [
+export const DATA_TYPES = [
   "string",
   "number",
   "void",
@@ -21,10 +21,10 @@ export const dataTypes = [
   "object"
 ] as const;
 
-export type DataType = (typeof dataTypes)[number];
+export type DataType = (typeof DATA_TYPES)[number];
 
 
-export const ReturnTypeEnum = pgEnum("return_type", dataTypes);
+export const RETURN_TYPE_ENUM = pgEnum("return_type", DATA_TYPES);
 
 export type Parameter = {
   name: string;
@@ -40,7 +40,7 @@ export const codebase = pgTable('codebases', {
   }),
 
   totalChunks: bigint('total_chunks', { mode: 'bigint' }).notNull(),
-  type: codebaseTypeEnum("type").notNull()
+  type: CODEBASE_TYPE_ENUM("type").notNull()
 });
 
 
@@ -53,9 +53,9 @@ export const chunk = pgTable('chunks', {
   }),
 
   name: text().notNull(),
-  kind: chunkTypeEnum("type").notNull(),
+  kind: CHUNK_TYPE_ENUM("type").notNull(),
   parameters: jsonb('parameters').$type<Parameter[]>(),
-  returnType: ReturnTypeEnum("return_type").notNull(),
+  returnType: RETURN_TYPE_ENUM("return_type").notNull(),
   code: text('code').notNull(),
 
   embedding: vector("embedding", { dimensions: 896 }).notNull()
