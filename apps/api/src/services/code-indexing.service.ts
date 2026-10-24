@@ -117,10 +117,12 @@ CreateCodeIndexingService()
       const root = tree.rootNode;
 
       const functions: Function[] = [];
+      
       Traverse_SourceTree(root, functions);
       for (const func of functions){
         console.log(func.parameters);
       }
+      return functions;
       // for (root.childWithDescendant) {
       //
       // }

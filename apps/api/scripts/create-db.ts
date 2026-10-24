@@ -11,9 +11,7 @@ const username = process.env.DB_USERNAME!;
 const password = process.env.DB_PASSWORD!;
 
 if (!database || !username || !password) {
-  throw new Error(
-    "DB_NAME, DB_USERNAME, and DB_PASSWORD are required",
-  );
+  throw new Error("DB_NAME, DB_USERNAME, and DB_PASSWORD are required");
 }
 
 function quoteIdentifier(value: string): string {
@@ -25,18 +23,17 @@ function quoteLiteral(value: string): string {
 }
 
 async function psql(databaseName: string, sql: string) {
-  return execFileAsync(
-    "sudo",
-    [
-      "-n",
-      "-u", "postgres",
-      "psql",
-      "-X",
-      "-v", "ON_ERROR_STOP=1",
-      "-d", databaseName,
-      "-c", sql,
-    ],
-  );
+  return execFileAsync("sudo", [
+    "-n",
+    "-u", "postgres",
+    "psql",
+    "-X",                      // ignore ~/.psqlrc
+    "-t",                      // tuples only: no header/footer
+    "-A",                      // unaligned: no padding whitespace
+    "-v", "ON_ERROR_STOP=1",
+    "-d", databaseName,
+    "-c", sql,
+  ]);
 }
 
 async function main() {
@@ -49,47 +46,37 @@ async function main() {
     "postgres",
     `DO $$
     BEGIN
-    IF NOT EXISTS (
-      SELECT FROM pg_catalog.pg_roles
-      WHERE rolname = ${quoteLiteral(username)}
-    ) THEN
-    CREATE ROLE ${role} WITH LOGIN PASSWORD ${rolePassword};
-    ELSE
-    ALTER ROLE ${role} WITH LOGIN PASSWORD ${rolePassword};
-    END IF;
+      IF NOT EXISTS (
+        SELECT FROM pg_catalog.pg_roles
+        WHERE rolname = ${quoteLiteral(username)}
+      ) THEN
+        CREATE ROLE ${role} WITH LOGIN PASSWORD ${rolePassword};
+      ELSE
+        ALTER ROLE ${role} WITH LOGIN PASSWORD ${rolePassword};
+      END IF;
     END
     $$;`,
   );
 
   console.log(`✓ Role "${username}" is ready`);
 
-  // Create the database if it does not exist.
+  // Check whether the database exists. With -t -A, stdout is exactly
+  // "exists" if a row matched and empty otherwise.
   const result = await psql(
     "postgres",
-    `SELECT 'exists'
-  FROM pg_catalog.pg_database
-  WHERE datname = ${quoteLiteral(database)};`,
+    `SELECT 'exists' FROM pg_catalog.pg_database WHERE datname = ${quoteLiteral(database)};`,
   );
 
-  if (!result.stdout.trim()) {
-    await psql(
-      "postgres",
-      `CREATE DATABASE ${db} OWNER ${role};`,
-    );
+  if (result.stdout.trim() !== "exists") {
+    await psql("postgres", `CREATE DATABASE ${db} OWNER ${role};`);
     console.log(`✓ Database "${database}" created`);
   } else {
-    await psql(
-      "postgres",
-      `ALTER DATABASE ${db} OWNER TO ${role};`,
-    );
+    await psql("postgres", `ALTER DATABASE ${db} OWNER TO ${role};`);
     console.log(`✓ Database "${database}" already exists`);
   }
 
   // Enable pgvector in the application database.
-  await psql(
-    database,
-    "CREATE EXTENSION IF NOT EXISTS vector;",
-  );
+  await psql(database, "CREATE EXTENSION IF NOT EXISTS vector;");
 
   console.log("✓ pgvector extension enabled");
 }
@@ -98,4 +85,3 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-
