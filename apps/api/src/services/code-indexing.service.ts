@@ -5,7 +5,8 @@ import typescript from "tree-sitter-typescript";
 import javascript from "tree-sitter-javascript";
 import yz from "yauzl";
 import Parser, { SyntaxNode } from "tree-sitter";
-import { ChunkInsert, DataType, DATA_TYPES, Parameter } from "../db/schemas/codebase";
+import { ChunkInsert, DataType, DATA_TYPES, Parameter, chunk, codebase } from "../db/schemas/codebase";
+import { NodePgDatabase, NodePgClient } from "drizzle-orm/node-postgres";
 
 export type IndexingService = {
   Create_New_Workspace: (file: Buffer) => void;
@@ -38,17 +39,23 @@ const PARAM_TYPES = new Set( [
 
 
 export function
-CreateCodeIndexingService()
+CreateCodeIndexingService(database: NodePgDatabase & { $client: NodePgClient })
 {
 
   async function
   Create_New_Workspace (file: Buffer)
   {
     const source_files = await Read_ZipFile(file);
-    const function_chunks = Create_Function_Chunks(source_files);
+    const function_chunks = await Create_Function_Chunks(source_files);
     
   }
 
+  async function
+  Write_Chunks(functions: Function[])
+  {
+    database.insert(codebase).values({ authorId: 1, totalChunks: BigInt(functions.length) , type: 'zip' }); 
+    database.insert(chunk).values(functions);
+  }
   async function
   Read_ZipFile ( file: Buffer ) : Promise<File[]>
   {
@@ -189,7 +196,7 @@ CreateCodeIndexingService()
   }
   
   async function
-    Traverse_SourceTree(node: SyntaxNode, functions: Function[])
+  Traverse_SourceTree(node: SyntaxNode, functions: Function[])
   {
 
     if ('function_definition' == node.type) {
