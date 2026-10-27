@@ -23,7 +23,7 @@ async function main(): Promise<void> {
    const llama = await getLlama();
    const decoderSerivce = await createDecoderService(llama);
    const encoderService = await createEncoderService(llama);
-  const indexingService = CreateCodeIndexingService();
+  const indexingService = CreateCodeIndexingService(db);
    const app = Express();
 
    const whitelist = ['http://localhost:5173'];
