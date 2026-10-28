@@ -5,7 +5,7 @@ import typescript from "tree-sitter-typescript";
 import javascript from "tree-sitter-javascript";
 import yz from "yauzl";
 import Parser, { SyntaxNode } from "tree-sitter";
-import { ChunkInsert, DataType, DATA_TYPES, Parameter, chunk, codebase, file, file, codebase } from "../db/schemas/codebase";
+import { ChunkInsert, DataType, DATA_TYPES, Parameter, chunk, file, codebase } from "../db/schemas/codebase";
 import { NodePgDatabase, NodePgClient } from "drizzle-orm/node-postgres";
 import { eq } from "drizzle-orm";
 
@@ -19,7 +19,7 @@ type File = {
   content: string;
 };
 
-type Function = Omit<ChunkInsert, 'embedding'>;
+type Function = ChunkInsert;
 
 type Allowed = '.h' | '.hpp' | '.cpp' | '.c' | '.ts' | '.js' | '.tsx' | '.jsx';
 const allowed: string[] = [ '.h', '.hpp', '.cpp', '.c', '.ts', '.tsx', '.js',
@@ -50,7 +50,7 @@ CreateCodeIndexingService(database: NodePgDatabase & { $client: NodePgClient })
                         .from(codebase).where(eq(codebase.authorId,1));
 
     const source_files = await Read_ZipFile(file);
-    const function_chunks = await Create_Function_Chunks(source_files, s_codebase[0]);
+    const function_chunks = await Create_Function_Chunks(source_files, s_codebase[0].id);
 
   }
 
@@ -104,10 +104,16 @@ CreateCodeIndexingService(database: NodePgDatabase & { $client: NodePgClient })
   {
 
     const parser = new Parser();
-
+    const functions: Function[] = [];
+    const chunks: ChunkInsert[] = [];
 
     for (const f of files) {
-
+      console.log(f.directory + f.fileName);
+      const insert_file = await database.insert(file).values({
+        codebaseId: codebase_id,
+        path: f.directory + f.fileName
+      })
+      .returning();
       const file_extension = f.fileName.slice(f.fileName.lastIndexOf('.'),
                              f.fileName.length);
 
@@ -128,16 +134,11 @@ CreateCodeIndexingService(database: NodePgDatabase & { $client: NodePgClient })
       const tree: Parser.Tree = parser.parse(f.content);
       const root = tree.rootNode;
 
-      const functions: Function[] = [];
-      const chunks: ChunkInsert[] = [];
+
       Traverse_SourceTree(root, functions);
       for (const func of functions){
-        console.log(func.parameters);
-        const insert_file = await database.insert(file).values({
-          codebaseId: codebase_id,
-          path: f.directory + f.fileName
-        })
-        .returning();
+       // console.log(func.parameters);
+
 
         const chunk: ChunkInsert = {
           name: func.name,
@@ -148,12 +149,12 @@ CreateCodeIndexingService(database: NodePgDatabase & { $client: NodePgClient })
           file: insert_file[0].id,
         };
       }
-      return functions;
       // for (root.childWithDescendant) {
       //
       // }
     }
 
+    return functions;
   }
 
   function
@@ -227,7 +228,8 @@ CreateCodeIndexingService(database: NodePgDatabase & { $client: NodePgClient })
                           kind      : 'function',
                           name      : Declarator_Name(fd.childForFieldName('declarator')) ?? "",
                           parameters: Find_Function_Parameters(fd),
-                          returnType: Find_Function_Return_Type(node, fd) as DataType
+                          returnType: Find_Function_Return_Type(node, fd) as DataType,
+                          embedding: []
                         }
                       );
       }
