@@ -44,117 +44,85 @@ CreateCodeIndexingService(database: NodePgDatabase & { $client: NodePgClient })
 {
 
   async function
-  Create_New_Workspace (file: Buffer)
+  Create_New_Workspace (zip: Buffer)
   {
-    const s_codebase = await database.select({ id: codebase.id })
-                        .from(codebase).where(eq(codebase.authorId,1));
-
-    const source_files = await Read_ZipFile(file);
-    const function_chunks = await Create_Function_Chunks(source_files, s_codebase[0].id);
-
+    const [cb] = await database.insert(codebase)
+      .values({ authorId: 1, totalChunks: BigInt(0), type: 'zip' })
+      .returning({ id: codebase.id });
+  
+    const source_files = await Read_ZipFile(zip);
+    const chunks = await Create_Function_Chunks(source_files, cb.id);
+  
+    await Write_Chunks(cb.id, chunks);
   }
 
   async function
-  Write_Chunks(functions: Function[])
+  Write_Chunks (codebase_id: string, chunks: ChunkInsert[])
   {
-    database.insert(codebase).values({ authorId: 1, totalChunks: BigInt(functions.length) , type: 'zip' });
-    database.insert(chunk).values(functions);
+    if (chunks.length === 0) return;
+    await database.insert(chunk).values(chunks);
+    await database.update(codebase)
+      .set({ totalChunks: BigInt(chunks.length) })
+      .where(eq(codebase.id, codebase_id));
   }
   async function
-  Read_ZipFile ( file: Buffer ) : Promise<File[]>
+  Read_ZipFile (zip: Buffer): Promise<File[]>
   {
-    let currentDir: string = '';
     const files: File[] = [];
-
-    const result = await yz.fromBufferPromise(file, { lazyEntries: true });
-
-    for await (let entry of result.eachEntry()) {
+    const result = await yz.fromBufferPromise(zip, { lazyEntries: true });
+  
+    for await (const entry of result.eachEntry()) {
+      if (entry.fileName.endsWith('/')) continue;                 // directory entry
+  
+      const ext = entry.fileName.slice(entry.fileName.lastIndexOf('.'));
+      if (!allowed.includes(ext)) continue;
+  
       const readStream = await result.openReadStreamPromise(entry);
-
-      currentDir = entry.fileName;
-      if (allowed.includes(
-          entry.fileName.slice(currentDir.lastIndexOf('.')
-            ,
-          currentDir.length))
-      ) {
-
-        readStream.on("data", (data) => {
-          files.push({
-            directory : currentDir.slice(0, currentDir.lastIndexOf('/') + 1),
-            fileName  : currentDir.slice(currentDir.lastIndexOf('/') + 1,
-                        currentDir.length),
-
-            content   : data.toString()
-          });
-        });
-      }
-
+      const parts: Buffer[] = [];
+      for await (const part of readStream) parts.push(part as Buffer);  // wait for the whole file
+  
+      const slash = entry.fileName.lastIndexOf('/') + 1;
+      files.push({
+        directory: entry.fileName.slice(0, slash),
+        fileName : entry.fileName.slice(slash),
+        content  : Buffer.concat(parts).toString('utf8'),
+      });
     }
-
-    result.once("end", () => {
-      console.log("END OF ZIP FILE.");
-      result.close();
-    });
-
+  
+    result.close();
     return files;
   }
+
 
   async function
   Create_Function_Chunks (files: File[], codebase_id: string)
   {
-
     const parser = new Parser();
-    const functions: Function[] = [];
     const chunks: ChunkInsert[] = [];
-
+  
     for (const f of files) {
-      console.log(f.directory + f.fileName);
-      const insert_file = await database.insert(file).values({
+      const ext = f.fileName.slice(f.fileName.lastIndexOf('.'));
+  
+      if (['.cpp', '.c', '.h', '.hpp'].includes(ext)) parser.setLanguage(cpp);
+      else if (ext === '.ts')                         parser.setLanguage(typescript.typescript);
+      else if (ext === '.tsx')                        parser.setLanguage(typescript.tsx);
+      else if (ext === '.js' || ext === '.jsx')       parser.setLanguage(javascript);
+      else continue;
+  
+      const [inserted] = await database.insert(file).values({
         codebaseId: codebase_id,
-        path: f.directory + f.fileName
-      })
-      .returning();
-      const file_extension = f.fileName.slice(f.fileName.lastIndexOf('.'),
-                             f.fileName.length);
-
-      if (['.cpp', '.c', '.h', '.hpp'].includes(file_extension)) {
-
-        parser.setLanguage(cpp);
-      } else if (file_extension == '.ts') {
-
-        parser.setLanguage(typescript.typescript);
-      } else if (file_extension == '.tsx') {
-
-        parser.setLanguage(typescript.tsx);
-      } else if (file_extension == '.js') {
-
-        parser.setLanguage(javascript);
+        path: f.directory + f.fileName,
+      }).returning();
+  
+      const functions: Function[] = [];                  // per file
+      Traverse_SourceTree(parser.parse(f.content).rootNode, functions);
+  
+      for (const func of functions) {
+        chunks.push({ ...func, file: inserted.id });     // keeps parameters too
       }
-
-      const tree: Parser.Tree = parser.parse(f.content);
-      const root = tree.rootNode;
-
-
-      Traverse_SourceTree(root, functions);
-      for (const func of functions){
-       // console.log(func.parameters);
-
-
-        const chunk: ChunkInsert = {
-          name: func.name,
-          kind: func.kind,
-          code: func.code,
-          returnType: func.returnType,
-          embedding: [],
-          file: insert_file[0].id,
-        };
-      }
-      // for (root.childWithDescendant) {
-      //
-      // }
     }
-
-    return functions;
+  
+    return chunks;                                       // not `functions`
   }
 
   function
@@ -215,7 +183,7 @@ CreateCodeIndexingService(database: NodePgDatabase & { $client: NodePgClient })
     return trailing ?? (base ? base + indirection : undefined);
   }
 
-  async function
+  function
   Traverse_SourceTree(node: SyntaxNode, functions: Function[])
   {
 

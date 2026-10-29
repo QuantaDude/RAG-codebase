@@ -22,7 +22,7 @@ export function createUserController(indexingService: IndexingService) {
 
   async function handleZipUpload(req: Request, res: Response) {
 
-    indexingService.Create_New_Workspace(req.body);
+    await indexingService.Create_New_Workspace(req.body);
     res.status(201).send();
   }
   return {
